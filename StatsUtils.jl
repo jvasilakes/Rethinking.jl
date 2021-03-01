@@ -53,3 +53,15 @@ function extract_samples(model; N=10_000)
     rename!(post, names(model.values)[1])
     return post
 end
+
+
+function link_lm(model, data; N=1_000)
+    μ_samples = []
+    x̄ = mean(data)
+    for weight in data
+        post = extract_samples(model; N=N)
+        μ_at_datum = post.α + post.β * (weight - x̄)
+        push!(μ_samples, μ_at_datum)
+    end
+    return hcat(μ_samples...)
+end

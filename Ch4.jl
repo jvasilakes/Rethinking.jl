@@ -7,7 +7,7 @@ using DataFrames
 using PlotThemes
 using StatsPlots
 using Distributions
-include("StatsUtils.jl")  # PI, HPDI, extract_samples
+include("StatsUtils.jl")  # PI, HPDI, extract_samples, link_lm
 
 # Set plot theme
 theme(:dark)
@@ -369,11 +369,12 @@ end
 
 # Skipping R Code 4.47 as it is a trivial slice of post
 
-# R Code 4.48
-function R4_48(N)
+# R Code 4.{48,49}
+function R4_48_49(N)
     df = DataFrame(CSV.File("data/Howell1.csv"))
     df2 = df[df.age .≥ 18, :]
     dfN = df2[1:N, :]
+    x̄ = mean(dfN.weight)
 
     # Define the regression model
     @model regression(weights, heights) = begin
@@ -392,11 +393,58 @@ function R4_48(N)
 
     plt = scatter(dfN.weight, dfN.height, leg=false)
     for i ∈ 1:N
-        x̄ = mean(dfN.weight)
         f_i(x) = post.α[i] + post.β[i] * (x - x̄)
         xfrom = minimum(dfN.weight)
         xto = maximum(dfN.weight)
         plot!(f_i, xfrom, xto, color="grey", alpha=0.3, leg=false) 
     end
+    display(plt)
+end
+
+
+# R Code 4.{50,51,52}
+# m4_3: optimised model returned by R4_42 or R4_43
+function R4_50_52(m4_3)
+    df = DataFrame(CSV.File("data/Howell1.csv"))
+    df2 = df[df.age .≥ 18, :]
+    x̄ = mean(df2.weight)
+    post = extract_samples(m4_3; N=10_000)
+    μ_at_50 = post.α + post.β * (50 - x̄)
+    display(density(μ_at_50, xlabel="μ|weight=50", leg=false))
+    println(PI(μ_at_50, 0.89))
+end
+
+
+# R Code 4.{53,54,55}
+# m4_3: optimised model returned by R4_42 or R4_43
+function R4_53_55(m4_3)
+    df = DataFrame(CSV.File("data/Howell1.csv"))
+    df2 = df[df.age .≥ 18, :]
+    μ = link_lm(m4_3, df2.weight)
+    println(μ[1:3], " ... ", μ[end-3:end])
+    weight_seq = range(25, 70; step=1)
+    μ = link_lm(m4_3, weight_seq)
+    println(μ[1:3], " ... ", μ[end-3:end])
+    plt = scatter(df2.weight, df2.height, leg=false, alpha=0.1)
+    for i ∈ 1:length(weight_seq)
+        x = repeat([weight_seq[i]], size(μ, 1))
+        scatter!(x, μ[:,i], alpha=0.1, color="red")
+    end
+    display(plt)
+    return μ
+end
+
+# R Code 4.{56,57}
+# μ: return value of R4_53_55()
+function R4_56_57(μ)
+    df = DataFrame(CSV.File("data/Howell1.csv"))
+    df2 = df[df.age .≥ 18, :]
+    weight_seq = range(25, 70; step=1)
+    μ_mean = mapslices(mean, μ; dims=1)[1,:]
+    μ_PI = mapslices((xs) -> PI(xs, 0.89), μ; dims=1)
+    plt = scatter(df2.weight, df2.height, alpha=0.25, leg=false)
+    lower_bound = abs.(μ_PI[1,:] - μ_mean)
+    upper_bound = abs.(μ_PI[2,:] - μ_mean)
+    plot!(weight_seq, μ_mean, leg=false, ribbon=(lower_bound, upper_bound))
     display(plt)
 end
